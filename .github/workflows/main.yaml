@@ -30,7 +30,7 @@ jobs:
     needs: integration
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.build-image.outputs.image }}
+      image: ${{ steps.build-image.outputs.image }} # Output image URL for the next job
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -79,16 +79,17 @@ jobs:
       - name: Set Image from Output
         run: |
           echo "IMAGE=${{ needs.build-and-push-ecr-image.outputs.image }}" >> $GITHUB_ENV
-          echo "IMAGE=$IMAGE"
+          echo "Image URL set to: $IMAGE"  # For debugging purposes, check if it's set correctly
 
       - name: Check if IMAGE is set
-        run: echo $IMAGE  # This is just to verify the image path
+        run: echo "IMAGE value: $IMAGE"  # Debugging step to see if the IMAGE value is passed
 
       - name: Pull Latest Image
         run: |
           if [ -z "$IMAGE" ]; then
-            echo "IMAGE is not set"; exit 1;
+            echo "ERROR: IMAGE is not set"; exit 1;
           else
+            echo "Pulling image: $IMAGE"
             docker pull $IMAGE
           fi
 
