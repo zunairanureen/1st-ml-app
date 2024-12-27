@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euxo pipefail
           echo "Building Docker image..."
-          # Ensure correct build context is passed and no spaces in tag
+          # Ensure no spaces in the tag and build context is passed correctly
           docker buildx build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . --push || \
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . --push
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
