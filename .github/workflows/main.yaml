@@ -19,10 +19,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Lint code
+      - name: Lint Code
         run: echo "Linting repository"
 
-      - name: Run unit tests
+      - name: Run Unit Tests
         run: echo "Running unit tests"
 
   build-and-push-ecr-image:
@@ -49,7 +49,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build, Tag, and Push Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
@@ -57,47 +57,37 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-      - name: Clean up unused Docker resources
-        run: |
-          # Remove dangling images, stopped containers, and unused volumes
-          docker system prune -f --volumes
-
-  Continuous-Deployment:
+  continuous-deployment:
     needs: build-and-push-ecr-image
     runs-on: self-hosted
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Pull latest image from ECR
+      - name: Pull Latest Image
         run: |
-          docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+          docker pull ${{ env.image }}
 
-      - name: Stop and remove existing container (if running)
+      - name: Stop and Remove Running Container
         run: |
-          docker ps -q --filter "name=mltest" | grep -q . && docker stop mltest && docker rm -fv mltest || true
+          docker ps -q --filter "name=mltest" | grep -q . && docker stop mltest && docker rm -fv mltest || echo "No container to stop"
 
-      - name: Run Docker image to serve users
+      - name: Run Docker Image
         run: |
           docker run -d -p 8080:8080 --ipc="host" --name=mltest \
-          -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
-          -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
-          -e AWS_REGION=${{ secrets.AWS_REGION }} \
-          ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            -e AWS_REGION=${{ secrets.AWS_REGION }} \
+            ${{ env.image }}
 
-      - name: Clean up unused Docker resources
-        run: |
-          # Clean up dangling images, stopped containers, and unused volumes
-          docker system prune -f --volumes
+      - name: Cleanup Unused Docker Resources
+        run: docker system prune -f --volumes
