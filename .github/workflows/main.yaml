@@ -29,8 +29,6 @@ jobs:
     name: Continuous Delivery
     needs: integration
     runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.build-image.outputs.image }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -51,16 +49,30 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Debug Working Directory
+        run: |
+          pwd
+          ls -la
+
+      - name: Verify Docker Installation
+        run: |
+          docker --version
+          docker info
+          docker buildx ls
+
       - name: Build, Tag, and Push Image
-        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          set -euxo pipefail
+          echo "Building Docker image..."
+          # Ensure correct build context
+          docker buildx build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . --push || \
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . --push
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   continuous-deployment:
     needs: build-and-push-ecr-image
@@ -76,12 +88,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Set Image from Output
-        run: echo "IMAGE=${{ needs.build-and-push-ecr-image.outputs.image }}" >> $GITHUB_ENV
-
       - name: Pull Latest Image
         run: |
-          docker pull $IMAGE
+          docker pull ${{ needs.build-and-push-ecr-image.outputs.image }}
 
       - name: Stop and Remove Running Container
         run: |
@@ -93,7 +102,10 @@ jobs:
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e AWS_REGION=${{ secrets.AWS_REGION }} \
-            $IMAGE
+            ${{ needs.build-and-push-ecr-image.outputs.image }}
 
       - name: Cleanup Unused Docker Resources
-        run: docker system prune -f --volumes
+        run: |
+          docker container prune -f
+          docker image prune -f
+          docker volume prune -f
