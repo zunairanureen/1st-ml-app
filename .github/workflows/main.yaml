@@ -49,16 +49,10 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Debug Working Directory
+      - name: Debug Build Context
         run: |
-          pwd
-          ls -la
-
-      - name: Verify Docker Installation
-        run: |
-          docker --version
-          docker info
-          docker buildx ls
+          echo "Current directory: $(pwd)"
+          ls -alh
 
       - name: Build, Tag, and Push Image
         env:
