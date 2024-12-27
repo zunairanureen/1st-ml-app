@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from src.pipeline.predict_pipeline import CustomData
 from src.pipeline.predict_pipeline import PredictPipeline
 
+
 application=Flask(__name__)
 
 app=application
